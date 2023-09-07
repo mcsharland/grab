@@ -14,6 +14,14 @@ read_value_from_file() {
 }
 
 grab() {
+  # Check for required utilities
+  for cmd in awk find mv; do
+    if ! command -v $cmd &> /dev/null; then
+      echo "Error: $cmd is not installed."
+      return 1
+    fi
+  done
+
   local all_flag=false
   local list_flag=false
   local permissions_file="$HOME/.grab_config"
@@ -23,8 +31,26 @@ grab() {
     initialize_default_configs "$permissions_file"
   fi
 
+  # Check if the config file is readable
+  if [ ! -r "$permissions_file" ]; then
+    echo "Error: Configuration file $permissions_file is not readable."
+    return 1
+  fi
+
+  # Read and validate config values
   local time_limit=$(read_value_from_file "$permissions_file" "time")
   local default_downloads_dir=$(read_value_from_file "$permissions_file" "downloads_dir")
+
+  if [ -z "$time_limit" ] || [ -z "$default_downloads_dir" ]; then
+    echo "Error: Configuration file $permissions_file is malformed. It must contain valid 'time' and 'downloads_dir' keys."
+    return 1
+  fi
+
+  # Validate time limit
+  if ! [[ "$time_limit" =~ ^[0-9]+$ ]]; then
+    echo "Error: Invalid time limit."
+    return 1
+  fi
   
   eval default_downloads_dir="$default_downloads_dir"
 
@@ -42,8 +68,14 @@ grab() {
 
   local destination_dir=${1:-"."}
 
+  # Check existence & write permissions for destination directory
   if [ ! -d "$destination_dir" ]; then
-    echo "Destination directory does not exist."
+    echo "Error: Destination directory does not exist."
+    return 1
+  fi
+
+  if [ ! -w "$destination_dir" ]; then
+    echo "Error: You do not have write permissions for $destination_dir."
     return 1
   fi
 
