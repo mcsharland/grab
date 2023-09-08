@@ -17,7 +17,7 @@ grab() {
   # Check for required utilities
   for cmd in awk find mv; do
     if ! command -v $cmd &> /dev/null; then
-      echo "Error: $cmd is not installed."
+      printf "Error: %s is not installed.\n" "$cmd"
       return 1
     fi
   done
@@ -33,7 +33,8 @@ grab() {
 
   # Check if the config file is readable
   if [ ! -r "$permissions_file" ]; then
-    echo "Error: Configuration file $permissions_file is not readable."
+    printf "Error: Configuration file %s is not readable.\n" "$permissions_file"
+
     return 1
   fi
 
@@ -42,13 +43,15 @@ grab() {
   local default_downloads_dir=$(read_value_from_file "$permissions_file" "downloads_dir")
 
   if [ -z "$time_limit" ] || [ -z "$default_downloads_dir" ]; then
-    echo "Error: Configuration file $permissions_file is malformed. It must contain valid 'time' and 'downloads_dir' keys."
+    printf "Error: Configuration file %s is malformed. It must contain valid 'time' and 'downloads_dir' keys.\n" "$permissions_file"
+
     return 1
   fi
 
   # Validate time limit
   if ! [[ "$time_limit" =~ ^[0-9]+$ ]]; then
-    echo "Error: Invalid time limit."
+    printf "Error: Invalid time limit.\n"
+
     return 1
   fi
   
@@ -61,7 +64,8 @@ grab() {
       a) all_flag=true ;;
       l) list_flag=true ;;
       t) time_limit=$OPTARG ;;
-      *) echo "Invalid option."; return 1 ;;
+      *) printf "Invalid option.\n"; return 1 ;;
+
     esac
   done
   shift $((OPTIND - 1))
@@ -70,12 +74,14 @@ grab() {
 
   # Check existence & write permissions for destination directory
   if [ ! -d "$destination_dir" ]; then
-    echo "Error: Destination directory does not exist."
+    printf "Destination directory does not exist.\n"
+
     return 1
   fi
 
   if [ ! -w "$destination_dir" ]; then
-    echo "Error: You do not have write permissions for $destination_dir."
+    printf "Error: You do not have write permissions for %s.\n" "$destination_dir"
+
     return 1
   fi
 
@@ -90,21 +96,25 @@ grab() {
     find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit" | while read -r file; do
       mv "$file" "$destination_dir"
       ((file_count++))
-      [ "$list_flag" = true ] && echo "Moved: $(basename "$file")"
+      [ "$list_flag" = true ] && printf "Moved: %s\n" "$(basename "$file")"
+
     done
 
-    [ "$list_flag" = false ] && echo "Moved $file_count files to $display_destination."
+    [ "$list_flag" = false ] && printf "Moved %d files to %s.\n" "$file_count" "$display_destination"
+
   else
     local newest_file=$(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit" -exec ls -lt {} + | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
 
 
     if [ -z "$newest_file" ]; then
-      echo "No recent files found in Downloads directory within the last $time_limit minutes."
+      printf "No recent files found in Downloads directory within the last %d minutes.\n" "$time_limit"
+
       return 1
     fi
 
     local newest_file_name=$(basename "$newest_file")
     mv "$newest_file" "$destination_dir"
-    echo "Moved $newest_file_name to $display_destination."
+    printf "Moved %s to %s.\n" "$newest_file_name" "$display_destination"
+
   fi
 }
