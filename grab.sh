@@ -1,3 +1,4 @@
+#!/bin/bash
 # Initialize default configurations 
 initialize_default_configs() {
   cat <<EOL > "$1"
@@ -93,14 +94,16 @@ grab() {
 
   if [ "$all_flag" = true ]; then
     file_count=0
-    find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit" | while read -r file; do
+    while read -r file; do
       mv "$file" "$destination_dir"
       ((file_count++))
       [ "$list_flag" = true ] && printf "Moved: %s\n" "$(basename "$file")"
-
-    done
-
+    done < <(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit")
+    if [ "$file_count" -eq 0 ]; then
+      printf "No recent files found in Downloads directory within the last %d minutes.\n" "$time_limit"
+    else
     [ "$list_flag" = false ] && printf "Moved %d files to %s.\n" "$file_count" "$display_destination"
+    fi
 
   else
     local newest_file=$(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit" -exec ls -lt {} + | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
@@ -118,3 +121,4 @@ grab() {
 
   fi
 }
+grab "$@"
