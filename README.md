@@ -3,22 +3,6 @@ grabs recently downloaded files and moves them to the current working directory
 
 ## Installation
 
-### Option 1: As a Standalone Script
-
-1. **Download the Script**: Save the `grab` function and its helper functions into a file, say `grab.sh`.
-
-2. **Make it Executable**: Run `chmod +x grab.sh` to make the script executable.
-
-3. **Move to Bin Directory**: Optionally, you can move the script to a directory in your `PATH` to make it accessible from anywhere. For example:
-
-    ```bash
-    mv grab.sh /usr/local/bin/grab
-    ```
-
-### Option 2: Sourcing in Shell Configuration
-
-If you prefer to have `grab` as a shell function:
-
 1. **Download the Script**: Save the `grab` function and its helper functions into a file, say `grab-function.sh`.
 
 2. **Source in Shell Configuration**: Add the following line to your `.bashrc`, `.zshrc`, or equivalent:
