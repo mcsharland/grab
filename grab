@@ -102,7 +102,7 @@ grab() {
     if [ "$file_count" -eq 0 ]; then
       printf "No recent files found in Downloads directory within the last %d minutes.\n" "$time_limit"
     else
-    [ "$list_flag" = false ] && printf "Moved %d files to %s.\n" "$file_count" "$display_destination"
+    [ "$list_flag" = false ] && printf "Moved %d file(s) to %s.\n" "$file_count" "$display_destination"
     fi
 
   else
