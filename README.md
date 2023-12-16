@@ -34,6 +34,7 @@ grab [OPTIONS] [DESTINATION_DIR]
 
 - `-a`: Move all eligible files from the Downloads directory.
 - `-l`: List files as they are moved.
+- `-x`: Deletes files instead of moving them.
 - `-t TIME_LIMIT`: Specify a time limit (in minutes) for which to consider files from the Downloads directory.
 
 ### Configuration File
@@ -67,4 +68,10 @@ downloads_dir=~/Downloads
 
     ```bash
     grab -a -l
+    ```
+
+4. Delete the most recently downloaded file:
+
+    ```bash
+    grab -x
     ```
