@@ -25,6 +25,7 @@ grab() {
 
   local all_flag=false
   local list_flag=false
+  local delete_flag=false
   local permissions_file="$HOME/.grab_config"
 
   # Init default config
@@ -60,10 +61,11 @@ grab() {
 
   local file_count=0
 
-  while getopts "alt:" opt; do
+  while getopts "alxt:" opt; do
     case $opt in
       a) all_flag=true ;;
       l) list_flag=true ;;
+      x) delete_flag=true ;;
       t) time_limit=$OPTARG ;;
       *) printf "Invalid option.\n"; return 1 ;;
 
@@ -92,17 +94,31 @@ grab() {
     display_destination="$destination_dir"
   fi
 
+  if [ "$delete_flag" = true ]; then
+    action="Deleted"
+    file_operation="rm" # Consider adding -f"
+    else
+    action="Moved"
+    file_operation="mv"
+  fi
+
   if [ "$all_flag" = true ]; then
     file_count=0
     while read -r file; do
-      mv "$file" "$destination_dir"
+      if [ "$delete_flag" = false ]; then
+        $file_operation "$file" "$destination_dir"
+      else
+        $file_operation "$file" 
+      fi
       ((file_count++))
-      [ "$list_flag" = true ] && printf "Moved: %s\n" "$(basename "$file")"
+      [ "$list_flag" = true ] && printf "%s: %s\n" "$action" "$(basename "$file")"
     done < <(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit")
     if [ "$file_count" -eq 0 ]; then
       printf "No recent files found in Downloads directory within the last %d minutes.\n" "$time_limit"
+    elif [ "$delete_flag" = false ]; then
+    [ "$list_flag" = false ] && printf "%s %d file(s) to %s.\n" "$action" "$file_count" "$display_destination"
     else
-    [ "$list_flag" = false ] && printf "Moved %d file(s) to %s.\n" "$file_count" "$display_destination"
+     [ "$list_flag" = false ] && printf "%s %d file(s).\n" "$action" "$file_count"
     fi
 
   else
@@ -116,9 +132,13 @@ grab() {
     fi
 
     local newest_file_name=$(basename "$newest_file")
-    mv "$newest_file" "$destination_dir"
-    printf "Moved %s to %s.\n" "$newest_file_name" "$display_destination"
-
+    if [ "$delete_flag" = false ]; then
+      $file_operation "$newest_file" "$destination_dir"
+      printf "%s %s to %s.\n" "$action" "$newest_file_name" "$display_destination"
+    else
+      $file_operation "$newest_file"
+      printf "%s %s.\n" "$action" "$newest_file_name"
+    fi
   fi
 }
 grab "$@"
