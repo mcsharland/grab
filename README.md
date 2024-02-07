@@ -44,8 +44,7 @@ The function reads default settings from a configuration file located at `$HOME/
 Example content:
 
 ```text
-# Default time limit in minutes
-# Set to -1 to disable
+# Default time limit in minutes, set to -1 to disable
 time=3
 # Default downloads directory path
 downloads_dir=~/Downloads

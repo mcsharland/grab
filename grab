@@ -3,6 +3,7 @@
 initialize_default_configs() {
   cat <<EOL > "$1"
 # Default time limit in minutes
+# Set to -1 to disable
 time=3
 # Default downloads directory path
 downloads_dir=~/Downloads
