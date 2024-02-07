@@ -49,15 +49,14 @@ grab() {
 
     return 1
   fi
-
-  # Validate time limit
-  if ! [[ "$time_limit" =~ ^[0-9]+$ ]]; then
-    printf "Error: Invalid time limit.\n"
-
-    return 1
-  fi
   
   eval default_downloads_dir="$default_downloads_dir"
+
+  if [ ! -d "$default_downloads_dir" ]; then
+  printf "Downloads directory %s does not exist.\n" "$default_downloads_dir"
+
+  return 1
+fi
 
   local file_count=0
 
@@ -73,11 +72,18 @@ grab() {
   done
   shift $((OPTIND - 1))
 
+  # Validate time limit
+  if ! [[ "$time_limit" =~ ^[0-9]+$ ]]; then
+    printf "Error: Invalid time limit.\n"
+
+    return 1
+  fi
+
   local destination_dir=${1:-"."}
 
   # Check existence & write permissions for destination directory
   if [ ! -d "$destination_dir" ]; then
-    printf "Destination directory does not exist.\n"
+    printf "Destination directory %s does not exist.\n" "$destination_dir"
 
     return 1
   fi
