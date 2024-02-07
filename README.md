@@ -36,7 +36,7 @@ grab [OPTIONS] [DESTINATION_DIR]
 - `-l`: List files as they are moved.
 - `-x`: Deletes files instead of moving them.
 - `-t TIME_LIMIT`: Specify a time limit (in minutes) for which to consider files from the Downloads directory.
-
+    - Value of `-1` selects the most recent file regardless of time.
 ### Configuration File
 
 The function reads default settings from a configuration file located at `$HOME/.grab_config`. The configuration file contains key-value pairs for the default time limit and the default Downloads directory.
@@ -45,6 +45,7 @@ Example content:
 
 ```text
 # Default time limit in minutes
+# Set to -1 to disable
 time=3
 # Default downloads directory path
 downloads_dir=~/Downloads
