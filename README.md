@@ -6,7 +6,7 @@ grabs recently downloaded files and moves them to the current working directory
 ### Prerequisites
 
 - Bash shell (version 4.x or later recommended)
-- `awk`, `find`, and `mv` utilities installed (usually pre-installed on Unix-like systems)
+- Common Unix/Linux utilities such as awk, find, xargs, etc. It checks for the availability of these utilities at runtime. Please ensure your environment has these utilities installed.
 
 ### Steps
 
