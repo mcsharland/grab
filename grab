@@ -124,18 +124,26 @@ grab() {
   if [ "$time_limit_minutes" -eq -1 ]; then
     find_command=(find "$default_downloads_dir" -maxdepth 1 -type f)
   else
-    find_command=(find "$default_downloads_dir" -maxdepth 1 -type f -mmin -"$time_limit_minutes")
+    find_command=(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit_minutes")
   fi
 
   if [ "$move_all_flag" = true ]; then
-    file_count=0
+    file_count=$("${find_command[@]}" | wc -l)
+    if [ "$file_count" -gt 0 ] && [ "$delete_flag" = true ]; then
+      printf "This will delete %d file(s). Are you sure? [y/N]\n" "$file_count"
+      read -r confirmation
+      if [[ ! $confirmation =~ ^[Yy]$ ]]; then
+        printf "Operation aborted!\n"
+        return 1
+      fi
+    fi
+
     while read -r file; do
       if [ "$delete_flag" = false ]; then
         $file_operation "$file" "$destination_dir"
       else
         $file_operation "$file" 
       fi
-      ((file_count++))
       [ "$list_flag" = true ] && printf "%s: %s\n" "$action" "$(basename "$file")"
     done < <("${find_command[@]}")
     if [ "$file_count" -eq 0 ]; then
@@ -147,12 +155,13 @@ grab() {
     fi
 
   else
-    local newest_file=$( "${find_command[@]}" | xargs -I {} ls -lt "{}" | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}' )
+    # local newest_file=$( "${find_command[@]}" | xargs -I {} ls -lt "{}" | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}' )
+    local newest_file=$("${find_command[@]}" -print0 | xargs -0 ls -lt | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
 
     if [ -z "$newest_file" ]; then
       printf "No recent files found in Downloads directory within the last %d minutes.\n" "$time_limit_minutes"
 
-      return 1
+      return 0
     fi
 
     local newest_file_name=$(basename "$newest_file")
@@ -164,6 +173,7 @@ grab() {
       printf "%s %s.\n" "$action" "$newest_file_name"
     fi
   fi
+  return 0
 }
 check_required_utilities
 grab "$@"
