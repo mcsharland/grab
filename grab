@@ -155,7 +155,6 @@ grab() {
     fi
 
   else
-    # local newest_file=$( "${find_command[@]}" | xargs -I {} ls -lt "{}" | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}' )
     local newest_file=$("${find_command[@]}" -print0 | xargs -0 ls -lt | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
 
     if [ -z "$newest_file" ]; then
