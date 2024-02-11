@@ -127,6 +127,7 @@ grab() {
     find_command=(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit_minutes")
   fi
 
+  #TODO: replace the incrementing file_count with something like file_count=$("${find_command[@]}" | wc -l), then ask for confirmation before a grab -ax (delete all)
   if [ "$move_all_flag" = true ]; then
     file_count=$("${find_command[@]}" | wc -l)
     if [ "$file_count" -gt 0 ] && [ "$delete_flag" = true ]; then
@@ -155,7 +156,12 @@ grab() {
     fi
 
   else
-    local newest_file=$("${find_command[@]}" -print0 | xargs -0 ls -lt | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
+    # Undesirable fix until I rewrite later
+    if [ "$time_limit_minutes" -eq -1 ]; then
+    local newest_file=$(find "$default_downloads_dir" -maxdepth 1 -type f -exec ls -lt {} + | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
+    else
+    local newest_file=$(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit_minutes" -exec ls -lt {} + | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
+    fi
 
     if [ -z "$newest_file" ]; then
       printf "No recent files found in Downloads directory within the last %d minutes.\n" "$time_limit_minutes"
