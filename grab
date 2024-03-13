@@ -11,6 +11,11 @@ done
 
 # Initialize default configurations 
 initialize_default_configs() {
+  # Ensure the entire directory path exists
+  config_dir=$(dirname "$1")
+  if [ ! -d "$config_dir" ]; then
+    mkdir -p "$config_dir"
+  fi
   cat <<EOL > "$1"
 # Default time limit in minutes
 # Set to -1 to disable
@@ -30,7 +35,7 @@ grab() {
   local move_all_flag=false
   local list_flag=false
   local delete_flag=false
-  local permissions_file="$HOME/.grab_config"
+  local permissions_file="$HOME/.config/grab/grab_config"
 
   # Init default config
   if [ ! -f "$permissions_file" ]; then
