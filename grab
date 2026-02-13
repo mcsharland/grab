@@ -1,189 +1,262 @@
-#!/bin/bash
+#!/usr/bin/env python3
+import argparse
+import os
+import shutil
+import sys
+import time
+from pathlib import Path
 
-check_required_utilities() {
-for cmd in awk find mv xargs ls rm head basename; do
-  if ! command -v "$cmd" &> /dev/null; then
-    printf "Error: %s is not installed.\n" "$cmd"
-    return 1
-  fi
-done
-}
+DEFAULT_CONFIG_DIR = Path.home() / ".config" / "grab"
+DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "grab_config"
 
-# Initialize default configurations 
-initialize_default_configs() {
-  # Ensure the entire directory path exists
-  config_dir=$(dirname "$1")
-  if [ ! -d "$config_dir" ]; then
-    mkdir -p "$config_dir"
-  fi
-  cat <<EOL > "$1"
-# Default time limit in minutes
-# Set to -1 to disable
+DEFAULT_CONFIG = """\
+# grab configuration
+# Default time limit in minutes. Set to -1 to disable.
 time=3
-# Default downloads directory path
+# Downloads directory path (~ is expanded)
 downloads_dir=~/Downloads
-EOL
-}
+"""
 
-# Read value from key-value pair in config
-read_value_from_file() {
-  awk -F '=' -v key="$2" '$1 == key { print $2 }' "$1"
-}
 
-grab() {
+def get_file_arrival_time(path: Path) -> float:
+    st = path.stat()
+    if hasattr(st, "st_birthtime"):
+        return st.st_birthtime
+    return st.st_ctime
 
-  local move_all_flag=false
-  local list_flag=false
-  local delete_flag=false
-  local permissions_file="$HOME/.config/grab/grab_config"
 
-  # Init default config
-  if [ ! -f "$permissions_file" ]; then
-    initialize_default_configs "$permissions_file"
-  fi
+def ensure_config(config_path: Path) -> None:
+    """create the default config file if it doesn't exist"""
+    if config_path.exists():
+        return
 
-  # Check if the config file is readable
-  if [ ! -r "$permissions_file" ]; then
-    printf "Error: Configuration file %s is not readable.\n" "$permissions_file"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(DEFAULT_CONFIG)
 
-    return 1
-  fi
 
-  # Read and validate config values
-  local time_limit_minutes=$(read_value_from_file "$permissions_file" "time")
-  local default_downloads_dir=$(read_value_from_file "$permissions_file" "downloads_dir")
+def load_config(config_path: Path) -> dict:
+    """read and validate config file"""
+    if not config_path.is_file():
+        print(f"Error: Config file {config_path} not found.", file=sys.stderr)
+        sys.exit(1)
 
-  if [ -z "$time_limit_minutes" ] || [ -z "$default_downloads_dir" ]; then
-    printf "Error: Configuration file %s is malformed. It must contain valid 'time' and 'downloads_dir' keys.\n" "$permissions_file"
+    if not os.access(config_path, os.R_OK):
+        print(f"Error: Config file {config_path} is not readable.", file=sys.stderr)
+        sys.exit(1)
 
-    return 1
-  fi
- 
-  # Changed full path expansion to manual tilde expansion due to tilde read from files not expanding.
-  default_downloads_dir="${default_downloads_dir/#\~/$HOME}"
+    config = {}
+    with open(config_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                config[key.strip()] = value.strip()
 
-  if [ ! -d "$default_downloads_dir" ]; then
-  printf "Downloads directory '%s' does not exist.\n" "$default_downloads_dir"
+    if "time" not in config or "downloads_dir" not in config:
+        print(
+            f"Error: Config file {config_path} is malformed. "
+            "It must contain 'time' and 'downloads_dir' keys.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-  return 1
-  fi
+    try:
+        config["time"] = int(config["time"])
+    except ValueError:
+        print("Error: 'time' value in config must be an integer.", file=sys.stderr)
+        sys.exit(1)
 
-  local file_count=0
-  local find_command
+    config["downloads_dir"] = Path(config["downloads_dir"]).expanduser()
 
-  while getopts "alxt:" opt; do
-    case $opt in
-      a) move_all_flag=true ;;
-      l) list_flag=true ;;
-      x) delete_flag=true ;;
-      t) time_limit_minutes=$OPTARG ;;
-      *) printf "Invalid option.\n"; return 1 ;;
+    return config
 
-    esac
-  done
-  shift $((OPTIND - 1))
 
-  # Validate time limit
-  if ! [[ "$time_limit_minutes" =~ ^-1$ ]] && ! [[ "$time_limit_minutes" =~ ^[0-9]+$ ]]; then
-    printf "Error: Invalid time limit.\n"
+def find_recent_files(downloads_dir: Path, time_limit_minutes: int) -> list:
+    """
+    Find files in downloads_dir that arrived within the time limit.
+    - time_limit_minutes -1 returns all files
+    - sorted newest-first by arrival time
+    """
+    now = time.time()
+    files = []
 
-    return 1
-  fi
+    for entry in downloads_dir.iterdir():
+        if not entry.is_file():
+            continue
+        arrival = get_file_arrival_time(entry)
+        if time_limit_minutes == -1 or (now - arrival) <= time_limit_minutes * 60:
+            files.append((arrival, entry))
 
-  # Prevents someone from grabbing their entire downloads folder
-  if [ "$move_all_flag" = true ] &&  [[ "$time_limit_minutes" =~ ^-1$ ]]; then
-    printf "Error: Cannot use 'all' flag with time '-1'.\n"
+    files.sort(key=lambda x: x[0], reverse=True)
 
-    return 1
-  fi
+    return [f for _, f in files]
 
-  local destination_dir=${1:-"."}
 
-  # Check existence & write permissions for destination directory
-  if [ ! -d "$destination_dir" ]; then
-    printf "Destination directory %s does not exist.\n" "$destination_dir"
+def confirm(prompt: str) -> bool:
+    try:
+        response = input(f"{prompt} [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return response in ("y", "yes")
 
-    return 1
-  fi
 
-  if [ ! -w "$destination_dir" ]; then
-    printf "Error: You do not have write permissions for %s.\n" "$destination_dir"
+def grab(args=None) -> int:
+    config_path = DEFAULT_CONFIG_FILE
+    ensure_config(config_path)
+    config = load_config(config_path)
 
-    return 1
-  fi
+    time_limit_minutes = config["time"]
+    downloads_dir = config["downloads_dir"]
 
-  if [ "$destination_dir" = "." ]; then
-    display_destination="current directory"
-  else
-    display_destination="$destination_dir"
-  fi
+    parser = argparse.ArgumentParser(
+        prog="grab",
+        description="Move or delete recent files from your Downloads directory.",
+    )
 
-  if [ "$delete_flag" = true ]; then
-    action="Deleted"
-    file_operation="rm" # Consider adding -f"
-    else
-    action="Moved"
-    file_operation="mv"
-  fi
+    parser.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        dest="grab_all",
+        help="Grab all matching files (default: newest file only)",
+    )
 
-  if [ "$time_limit_minutes" -eq -1 ]; then
-    find_command=(find "$default_downloads_dir" -maxdepth 1 -type f)
-  else
-    find_command=(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit_minutes")
-  fi
+    parser.add_argument(
+        "-x",
+        "--delete",
+        action="store_true",
+        help="Delete files instead of moving them",
+    )
 
-  #TODO: replace the incrementing file_count with something like file_count=$("${find_command[@]}" | wc -l), then ask for confirmation before a grab -ax (delete all)
-  if [ "$move_all_flag" = true ]; then
-    file_count=$("${find_command[@]}" | wc -l)
-    if [ "$file_count" -gt 0 ] && [ "$delete_flag" = true ]; then
-      printf "This will delete %d file(s). Are you sure? [y/N]\n" "$file_count"
-      read -r confirmation
-      if [[ ! $confirmation =~ ^[Yy]$ ]]; then
-        printf "Operation aborted!\n"
+    parser.add_argument(
+        "-l",
+        "--list",
+        action="store_true",
+        help="List matching files without moving or deleting",
+    )
+
+    parser.add_argument(
+        "-t",
+        "--time",
+        type=int,
+        default=None,
+        dest="time_override",
+        help="Override time limit in minutes (-1 for no limit)",
+    )
+
+    parser.add_argument(
+        "destination",
+        nargs="?",
+        default=".",
+        help="Destination directory (default: current directory)",
+    )
+
+    parsed = parser.parse_args(args)
+
+    if parsed.time_override is not None:
+        time_limit_minutes = parsed.time_override
+
+    if time_limit_minutes < -1 or time_limit_minutes == 0:
+        print("Error: Time limit must be a positive integer or -1.", file=sys.stderr)
         return 1
-      fi
-    fi
 
-    while read -r file; do
-      if [ "$delete_flag" = false ]; then
-        $file_operation "$file" "$destination_dir"
-      else
-        $file_operation "$file" 
-      fi
-      [ "$list_flag" = true ] && printf "%s: %s\n" "$action" "$(basename "$file")"
-    done < <("${find_command[@]}")
-    if [ "$file_count" -eq 0 ]; then
-      printf "No recent files found in Downloads directory within the last %d minutes.\n" "$time_limit_minutes"
-    elif [ "$delete_flag" = false ]; then
-    [ "$list_flag" = false ] && printf "%s %d file(s) to %s.\n" "$action" "$file_count" "$display_destination"
-    else
-     [ "$list_flag" = false ] && printf "%s %d file(s).\n" "$action" "$file_count"
-    fi
+    # for safety don't allow deleting everything
+    if parsed.grab_all and time_limit_minutes == -1 and parsed.delete:
+        print(
+            "Error: Cannot delete all files with no time limit. "
+            "That would wipe your entire Downloads folder.",
+            file=sys.stderr,
+        )
+        return 1
 
-  else
-    # Undesirable fix until I rewrite later
-    if [ "$time_limit_minutes" -eq -1 ]; then
-    local newest_file=$(find "$default_downloads_dir" -maxdepth 1 -type f -exec ls -lt {} + | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
-    else
-    local newest_file=$(find "$default_downloads_dir" -maxdepth 1 -type f -mmin "-$time_limit_minutes" -exec ls -lt {} + | head -n 1 | awk '{for(i=9;i<=NF;++i) printf $i (i==NF?ORS:OFS)}')
-    fi
+    if not downloads_dir.is_dir():
+        print(
+            f"Error: Downloads directory '{downloads_dir}' does not exist.",
+            file=sys.stderr,
+        )
+        return 1
 
-    if [ -z "$newest_file" ]; then
-      printf "No recent files found in Downloads directory within the last %d minutes.\n" "$time_limit_minutes"
+    destination = Path(parsed.destination).resolve()
+    if not parsed.delete and not parsed.list:
+        if not destination.is_dir():
+            print(
+                f"Error: Destination '{destination}' does not exist.", file=sys.stderr
+            )
+            return 1
+        if not os.access(destination, os.W_OK):
+            print(f"Error: No write permission for '{destination}'.", file=sys.stderr)
+            return 1
 
-      return 0
-    fi
+    # find files
+    files = find_recent_files(downloads_dir, time_limit_minutes)
 
-    local newest_file_name=$(basename "$newest_file")
-    if [ "$delete_flag" = false ]; then
-      $file_operation "$newest_file" "$destination_dir"
-      printf "%s %s to %s.\n" "$action" "$newest_file_name" "$display_destination"
-    else
-      $file_operation "$newest_file"
-      printf "%s %s.\n" "$action" "$newest_file_name"
-    fi
-  fi
-  return 0
-}
-check_required_utilities
-grab "$@"
+    if not files:
+        if time_limit_minutes == -1:
+            print("No files found in Downloads directory.")
+        else:
+            print(
+                f"No recent files found within the last {time_limit_minutes} minute(s)."
+            )
+        return 0
+
+    # list mode
+    if parsed.list:
+        for f in files:
+            print(f.name)
+        print(f"\n{len(files)} file(s) found.")
+        return 0
+
+    targets = files if parsed.grab_all else [files[0]]
+    display_dest = (
+        "current directory" if parsed.destination == "." else str(destination)
+    )
+    action_past = "Deleted" if parsed.delete else "Moved"
+
+    # confirmation for bulk operations
+    if len(targets) > 1 and (parsed.delete or parsed.grab_all):
+        verb = "delete" if parsed.delete else f"move to {display_dest}"
+        print(f"About to {verb} {len(targets)} file(s):")
+        for t in targets[:10]:
+            print(f"  {t.name}")
+        if len(targets) > 10:
+            print(f"  ... and {len(targets) - 10} more")
+        if not confirm("Proceed?"):
+            print("Operation aborted.")
+            return 1
+
+    count = 0
+    for f in targets:
+        try:
+            if parsed.delete:
+                f.unlink()
+            else:
+                dest_path = destination / f.name
+                # handle name collisions
+                if dest_path.exists():
+                    stem, suffix = f.stem, f.suffix
+                    i = 1
+                    while dest_path.exists():
+                        dest_path = destination / f"{stem}_{i}{suffix}"
+                        i += 1
+                shutil.move(str(f), str(dest_path))
+            count += 1
+            print(f"{action_past} {f.name}")
+        except OSError as e:
+            print(f"Error processing {f.name}: {e}", file=sys.stderr)
+
+    if count == 0:
+        print("No files were processed.")
+    elif not parsed.delete:
+        if count == 1:
+            print(f"  -> {display_dest}")
+        else:
+            print(f"\n{action_past} {count} file(s) to {display_dest}.")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(grab())
