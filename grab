@@ -20,9 +20,10 @@ downloads_dir=~/Downloads
 
 def get_file_arrival_time(path: Path) -> float:
     st = path.stat()
+    candidates = [st.st_ctime, st.st_mtime]
     if hasattr(st, "st_birthtime"):
-        return st.st_birthtime
-    return st.st_ctime
+        candidates.append(st.st_birthtime)
+    return max(candidates)
 
 
 def ensure_config(config_path: Path) -> None:
@@ -133,7 +134,14 @@ def grab(args=None) -> int:
 
     parser.add_argument(
         "-l",
-        "--list",
+        "--log",
+        action="store_true",
+        help="Print each filename as it is processed",
+    )
+
+    parser.add_argument(
+        "-p",
+        "--preview",
         action="store_true",
         help="List matching files without moving or deleting",
     )
@@ -180,7 +188,7 @@ def grab(args=None) -> int:
         return 1
 
     destination = Path(parsed.destination).resolve()
-    if not parsed.delete and not parsed.list:
+    if not parsed.delete and not parsed.preview:
         if not destination.is_dir():
             print(
                 f"Error: Destination '{destination}' does not exist.", file=sys.stderr
@@ -202,8 +210,8 @@ def grab(args=None) -> int:
             )
         return 0
 
-    # list mode
-    if parsed.list:
+    # preview mode
+    if parsed.preview:
         for f in files:
             print(f.name)
         print(f"\n{len(files)} file(s) found.")
@@ -243,18 +251,19 @@ def grab(args=None) -> int:
                         i += 1
                 shutil.move(str(f), str(dest_path))
             count += 1
-            print(f"{action_past} {f.name}")
+            if parsed.log:
+                print(f"{action_past} {f.name}")
         except OSError as e:
             print(f"Error processing {f.name}: {e}", file=sys.stderr)
 
     if count == 0:
         print("No files were processed.")
-    elif not parsed.delete:
-        if count == 1:
-            print(f"  -> {display_dest}")
-        else:
-            print(f"\n{action_past} {count} file(s) to {display_dest}.")
-
+    elif parsed.delete:
+        print(f"{action_past} {count} file(s).")
+    elif count == 1:
+        print(f"{action_past} {targets[0].name} to {display_dest}.")
+    else:
+        print(f"{action_past} {count} file(s) to {display_dest}.")
     return 0
 
 

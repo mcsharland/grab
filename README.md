@@ -16,9 +16,10 @@ Requires Python 3. No dependencies.
 ```bash
 grab                    # move newest downloaded file here
 grab -a                 # move all recent files here
+grab -al                # same, but print each filename
 grab -a -t 5 target/    # move files from last 5 minutes to target/
 grab -x                 # delete newest downloaded file
-grab -l                 # list recent files without moving
+grab -p                 # preview recent files without moving
 grab -t -1              # ignore time limit, grab newest file
 ```
 
@@ -28,7 +29,8 @@ grab -t -1              # ignore time limit, grab newest file
 | ------ | --------------------------------------------------- |
 | `-a`   | All matching files (default: newest only)           |
 | `-x`   | Delete instead of move                              |
-| `-l`   | List matches without acting                         |
+| `-l`   | Print each filename as it's processed               |
+| `-p`   | Preview matches without acting                      |
 | `-t N` | Time limit in minutes (default: 3, -1 for no limit) |
 
 ## Config
